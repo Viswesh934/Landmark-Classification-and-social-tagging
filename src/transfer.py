@@ -7,9 +7,15 @@ import torch.nn as nn
 def get_model_transfer_learning(model_name="resnet18", n_classes=50):
 
     # Get the requested architecture
+    torchvision_version = torchvision.__version__
+    major, minor, _ = map(int, torchvision_version.split('.'))
     if hasattr(models, model_name):
 
-        model_transfer = getattr(models, model_name)(pretrained=True)
+        if major > 0 or (major == 0 and minor >= 13):
+            weights = models.get_model_weights(model_name).DEFAULT
+            model_transfer = getattr(models, model_name)(weights=weights)
+        else:
+            model_transfer = getattr(models, model_name)(pretrained=True)
 
     else:
 
@@ -23,13 +29,16 @@ def get_model_transfer_learning(model_name="resnet18", n_classes=50):
     # "param.requires_grad = False" freezes it
     # YOUR CODE HERE
 
+    for par in model_transfer.parameters():
+        par.requires_grad = False
+
     # Add the linear layer at the end with the appropriate number of classes
     # 1. get numbers of features extracted by the backbone
-    num_ftrs  = # YOUR CODE HERE
+    num_ftrs  = model_transfer.fc.in_features
 
     # 2. Create a new linear layer with the appropriate number of inputs and
     #    outputs
-    model_transfer.fc  = # YOUR CODE HERE
+    model_transfer.fc  = nn.Linear(num_ftrs, n_classes)
 
     return model_transfer
 
@@ -52,7 +61,7 @@ def test_get_model_transfer_learning(data_loaders):
     model = get_model_transfer_learning(n_classes=23)
 
     dataiter = iter(data_loaders["train"])
-    images, labels = dataiter.next()
+    images, labels = dataiter.__next__()
 
     out = model(images)
 
