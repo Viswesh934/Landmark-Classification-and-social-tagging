@@ -32,11 +32,15 @@ def get_optimizer(
     :param weight_decay: regularization coefficient
     """
     if optimizer.lower() == "sgd":
-        
+        # YOUR CODE HERE: create an instance of the SGD
         # optimizer. Use the input parameters learning_rate, momentum
         # and weight_decay
         opt = torch.optim.SGD(
-            model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay
+            # YOUR CODE HERE
+            model.parameters(),
+            lr = learning_rate,
+            momentum = momentum,
+            weight_decay = weight_decay
         )
 
     elif optimizer.lower() == "adam":
@@ -44,7 +48,10 @@ def get_optimizer(
         # optimizer. Use the input parameters learning_rate, momentum
         # and weight_decay
         opt = torch.optim.Adam(
-            model.parameters(), lr=learning_rate, weight_decay=weight_decay
+            # YOUR CODE HERE
+            model.parameters(),
+            lr = learning_rate,
+            weight_decay= weight_decay
         )
     else:
         raise ValueError(f"Optimizer {optimizer} not supported")
