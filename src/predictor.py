@@ -21,7 +21,7 @@ class Predictor(nn.Module):
         # We use nn.Sequential and not nn.Compose because the former
         # is compatible with torch.script, while the latter isn't
         self.transforms = nn.Sequential(
-            T.Resize([256, ]),  # We use single int value inside a list due to torchscript type restrictions
+            T.Resize([256, ],antialias=True),  # We use single int value inside a list due to torchscript type restrictions
             T.CenterCrop(224),
             T.ConvertImageDtype(torch.float),
             T.Normalize(mean.tolist(), std.tolist())
@@ -29,11 +29,13 @@ class Predictor(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
-            x = self.transforms(x)
+            # 1. apply transforms
+            x  = self.transforms(x)
             # 2. get the logits
-            logits = self.model(x)
+            x  = self.model(x)
             # 3. apply softmax
-            x = F.softmax(logits, dim=1)
+            #    HINT: remmeber to apply softmax across dim=1
+            x  = F.softmax(x,dim=1)
 
             return x
 
@@ -88,7 +90,7 @@ def test_model_construction(data_loaders):
     model = MyModel(num_classes=3, dropout=0.3)
 
     dataiter = iter(data_loaders["train"])
-    images, labels = dataiter.next()
+    images, labels = dataiter.__next__()
 
     predictor = Predictor(model, class_names=['a', 'b', 'c'], mean=mean, std=std)
 
