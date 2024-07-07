@@ -1,68 +1,55 @@
-import os
-
 import torch
-import numpy as np
-from torch import nn
-import torch.nn.functional as F
-from tqdm import tqdm
-from torchvision import datasets
-import torchvision.transforms as T
-from .helpers import get_data_location
+import torch.nn as nn
+import torch.optim
 
 
-class Predictor(nn.Module):
+def get_loss():
+    """
+    Get an instance of the CrossEntropyLoss (useful for classification),
+    optionally moving it to the GPU if use_cuda is set to True
+    """
 
-    def __init__(self, model, class_names, mean, std):
-        super().__init__()
+    # YOUR CODE HERE: select a loss appropriate for classification
+    loss  = nn.CrossEntropyLoss()
 
-        self.model = model.eval()
-        self.class_names = class_names
+    return loss
 
-        # We use nn.Sequential and not nn.Compose because the former
-        # is compatible with torch.script, while the latter isn't
-        self.transforms = nn.Sequential(
-            T.Resize([256, ]),  # We use single int value inside a list due to torchscript type restrictions
-            T.CenterCrop(224),
-            T.ConvertImageDtype(torch.float),
-            T.Normalize(mean.tolist(), std.tolist())
+
+def get_optimizer(
+    model: nn.Module,
+    optimizer: str = "SGD",
+    learning_rate: float = 0.01,
+    momentum: float = 0.5,
+    weight_decay: float = 0,
+):
+    """
+    Returns an optimizer instance
+
+    :param model: the model to optimize
+    :param optimizer: one of 'SGD' or 'Adam'
+    :param learning_rate: the learning rate
+    :param momentum: the momentum (if the optimizer uses it)
+    :param weight_decay: regularization coefficient
+    """
+    if optimizer.lower() == "sgd":
+        
+        # optimizer. Use the input parameters learning_rate, momentum
+        # and weight_decay
+        opt = torch.optim.SGD(
+            model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad():
-            x = self.transforms(x)
-            # 2. get the logits
-            logits = self.model(x)
-            # 3. apply softmax
-            x = F.softmax(logits, dim=1)
+    elif optimizer.lower() == "adam":
+        # YOUR CODE HERE: create an instance of the Adam
+        # optimizer. Use the input parameters learning_rate, momentum
+        # and weight_decay
+        opt = torch.optim.Adam(
+            model.parameters(), lr=learning_rate, weight_decay=weight_decay
+        )
+    else:
+        raise ValueError(f"Optimizer {optimizer} not supported")
 
-            return x
-
-
-def predictor_test(test_dataloader, model_reloaded):
-    """
-    Test the predictor. Since the predictor does not operate on the same tensors
-    as the non-wrapped model, we need a specific test function (can't use one_epoch_test)
-    """
-
-    folder = get_data_location()
-    test_data = datasets.ImageFolder(os.path.join(folder, "test"), transform=T.ToTensor())
-
-    pred = []
-    truth = []
-    for x in tqdm(test_data, total=len(test_dataloader.dataset), leave=True, ncols=80):
-        softmax = model_reloaded(x[0].unsqueeze(dim=0))
-
-        idx = softmax.squeeze().argmax()
-
-        pred.append(int(x[1]))
-        truth.append(int(idx))
-
-    pred = np.array(pred)
-    truth = np.array(truth)
-
-    print(f"Accuracy: {(pred==truth).sum() / pred.shape[0]}")
-
-    return truth, pred
+    return opt
 
 
 ######################################################################################
@@ -72,37 +59,63 @@ import pytest
 
 
 @pytest.fixture(scope="session")
-def data_loaders():
-    from .data import get_data_loaders
-
-    return get_data_loaders(batch_size=2)
+def fake_model():
+    return nn.Linear(16, 256)
 
 
-def test_model_construction(data_loaders):
+def test_get_loss():
 
-    from .model import MyModel
-    from .helpers import compute_mean_and_std
-
-    mean, std = compute_mean_and_std()
-
-    model = MyModel(num_classes=3, dropout=0.3)
-
-    dataiter = iter(data_loaders["train"])
-    images, labels = dataiter.next()
-
-    predictor = Predictor(model, class_names=['a', 'b', 'c'], mean=mean, std=std)
-
-    out = predictor(images)
+    loss = get_loss()
 
     assert isinstance(
-        out, torch.Tensor
-    ), "The output of the .forward method should be a Tensor of size ([batch_size], [n_classes])"
+        loss, nn.CrossEntropyLoss
+    ), f"Expected cross entropy loss, found {type(loss)}"
 
-    assert out.shape == torch.Size(
-        [2, 3]
-    ), f"Expected an output tensor of size (2, 3), got {out.shape}"
 
-    assert torch.isclose(
-        out[0].sum(),
-        torch.Tensor([1]).squeeze()
-    ), "The output of the .forward method should be a softmax vector with sum = 1"
+def test_get_optimizer_type(fake_model):
+
+    opt = get_optimizer(fake_model)
+
+    assert isinstance(opt, torch.optim.SGD), f"Expected SGD optimizer, got {type(opt)}"
+
+
+def test_get_optimizer_is_linked_with_model(fake_model):
+
+    opt = get_optimizer(fake_model)
+
+    assert opt.param_groups[0]["params"][0].shape == torch.Size([256, 16])
+
+
+def test_get_optimizer_returns_adam(fake_model):
+
+    opt = get_optimizer(fake_model, optimizer="adam")
+
+    assert opt.param_groups[0]["params"][0].shape == torch.Size([256, 16])
+    assert isinstance(opt, torch.optim.Adam), f"Expected SGD optimizer, got {type(opt)}"
+
+
+def test_get_optimizer_sets_learning_rate(fake_model):
+
+    opt = get_optimizer(fake_model, optimizer="adam", learning_rate=0.123)
+
+    assert (
+        opt.param_groups[0]["lr"] == 0.123
+    ), "get_optimizer is not setting the learning rate appropriately. Check your code."
+
+
+def test_get_optimizer_sets_momentum(fake_model):
+
+    opt = get_optimizer(fake_model, optimizer="SGD", momentum=0.123)
+
+    assert (
+        opt.param_groups[0]["momentum"] == 0.123
+    ), "get_optimizer is not setting the momentum appropriately. Check your code."
+
+
+def test_get_optimizer_sets_weight_decat(fake_model):
+
+    opt = get_optimizer(fake_model, optimizer="SGD", weight_decay=0.123)
+
+    assert (
+        opt.param_groups[0]["weight_decay"] == 0.123
+    ), "get_optimizer is not setting the weight_decay appropriately. Check your code."
